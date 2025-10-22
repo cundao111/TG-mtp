@@ -1,92 +1,71 @@
 #!/usr/bin/env bash
-# interactive-mtproxy.sh
-# 用途: 交互式按步骤执行安装 mtproxy 的命令（每步确认）
-# 使用: ./interactive-mtproxy.sh [--auto] [--log logfile]
-# 说明:
-#   --auto : 不询问，自动逐步执行（谨慎）
-#   --log  : 将输出和错误追加到指定日志文件
+# =========================================
+# 🧰 TG 代理一键菜单脚本（交互式）
+# =========================================
 
-set -u
+set -e
 
-AUTO=false
-LOGFILE=""
-
-# 解析参数
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --auto) AUTO=true; shift ;;
-    --log) LOGFILE="$2"; shift 2 ;;
-    --help|-h) echo "Usage: $0 [--auto] [--log logfile]"; exit 0 ;;
-    *) echo "Unknown arg: $1"; exit 1 ;;
-  esac
-done
-
-# 日志函数
-log() {
-  echo -e "$1"
-  if [[ -n "$LOGFILE" ]]; then
-    echo -e "$(date +"%F %T") $1" >> "$LOGFILE"
-  fi
-}
-
-# 确认函数（自动模式直接返回 true）
-confirm_step() {
-  local prompt="$1"
-  if $AUTO ; then
-    return 0
-  fi
-  read -p "$prompt (y/n): " ans
-  case "$ans" in
+# 函数：确认执行
+confirm() {
+  read -p "$1 (y/n): " choice
+  case "$choice" in
     [yY]|[yY][eE][sS]) return 0 ;;
     *) return 1 ;;
   esac
 }
 
-# 步骤定义：每步由说明和命令组成
-steps=(
-  "第一步：删除旧目录并创建 /home/mtproxy，进入该目录;rm -rf /home/mtproxy && mkdir -p /home/mtproxy && cd /home/mtproxy"
-  "第二步：下载 mtproxy 安装脚本;curl -fsSL -o mtproxy.sh https://github.com/ellermister/mtproxy/raw/master/mtproxy.sh"
-  "第三步：执行 mtproxy 安装脚本;bash mtproxy.sh"
-)
+# 安装 TG 代理
+install_mtproxy() {
+  echo "------------------------------"
+  echo "🚀 安装 TG 代理 (MTProxy)"
+  echo "------------------------------"
 
-# 主循环
-for entry in "${steps[@]}"; do
-  desc=$(echo "$entry" | cut -d';' -f1)
-  cmd=$(echo "$entry" | cut -d';' -f2-)
+  steps=(
+    "第一步：删除旧目录并创建 /home/mtproxy;rm -rf /home/mtproxy && mkdir -p /home/mtproxy && cd /home/mtproxy"
+    "第二步：下载 mtproxy 安装脚本;curl -fsSL -o mtproxy.sh https://github.com/ellermister/mtproxy/raw/master/mtproxy.sh"
+    "第三步：执行安装脚本;bash mtproxy.sh"
+  )
 
-  log "----------------------------------------"
-  log "步骤: $desc"
-  log "命令: $cmd"
+  for step in "${steps[@]}"; do
+    desc=$(echo "$step" | cut -d';' -f1)
+    cmd=$(echo "$step" | cut -d';' -f2-)
+    echo
+    echo "$desc"
+    confirm "是否执行此步骤？" && eval "$cmd" && echo "✅ 已完成" || echo "⏭️ 已跳过"
+  done
 
-  if confirm_step "是否执行此步骤？"; then
-    log "执行中..."
-    # 在子 shell 中执行以避免改变主脚本的工作目录，除非命令本身包含 cd 并需要影响后续步骤
-    if echo "$cmd" | grep -q "cd "/home/mtproxy""; then
-      # 如果命令包含进入目录的操作，需要在当前 shell 执行以保留目录
-      eval "$cmd"
-      rc=$?
-    else
-      (eval "$cmd")
-      rc=$?
-    fi
+  echo "🎉 安装流程结束。"
+}
 
-    if [[ $rc -ne 0 ]]; then
-      log "❌ 命令返回非零状态: $rc"
-      # 在非自动模式下，询问是否继续
-      if ! $AUTO ; then
-        if confirm_step "命令失败。是否继续执行后续步骤？"; then
-          log "继续下一步。"
-        else
-          log "脚本中止。"
-          exit $rc
-        fi
-      fi
-    else
-      log "✅ 步骤完成。"
-    fi
-  else
-    log "⏭️ 跳过此步骤。"
-  fi
+# 卸载 TG 代理
+uninstall_mtproxy() {
+  echo "------------------------------"
+  echo "🧹 卸载 TG 代理"
+  echo "------------------------------"
+  confirm "确定要删除 /home/mtproxy 吗？此操作不可恢复！" && \
+  rm -rf /home/mtproxy && echo "✅ 已卸载 MTProxy。" || \
+  echo "⏭️ 已取消卸载。"
+}
+
+# 主菜单
+while true; do
+  clear
+  echo "=========================================="
+  echo "🌐 TG 代理安装/卸载脚本"
+  echo "=========================================="
+  echo "1) 安装 TG 代理"
+  echo "2) 卸载 TG 代理"
+  echo "3) 退出"
+  echo "------------------------------------------"
+  read -p "请选择操作 [1-3]: " choice
+
+  case "$choice" in
+    1) install_mtproxy ;;
+    2) uninstall_mtproxy ;;
+    3) echo "👋 已退出。"; exit 0 ;;
+    *) echo "❌ 无效选项，请输入 1-3。"; sleep 1 ;;
+  esac
+
+  echo
+  read -p "按 Enter 返回菜单..." _
 done
-
-log "\n🎉 所有步骤处理完成，脚本退出。"
